@@ -1,0 +1,48 @@
+=== Dynamic Metal Price Calculator ===
+Contributors: aolo
+Donate link: https://aolo.software/
+Tags: woocommerce, jewellery, gold, silver, pricing
+Requires at least: 5.0
+Tested up to: 6.8
+Stable tag: 1.0.2
+Requires PHP: 7.4
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Compute jewellery product prices in WooCommerce from metal rates, weight, wastage, making charge, and markup.
+
+== Description ==
+Dynamic Metal Price Calculator enables store owners to:
+* Set today's gold and silver prices from a simple admin page.
+* Add per-product metadata (metal type, base price, weight, wastage, making charge, markup).
+* Automatically compute final product prices for simple and variable products.
+* Integrate computed prices with WooCommerce so taxes and shipping work as configured.
+
+== Installation ==
+1. Upload the plugin folder to `/wp-content/plugins/`.
+2. Activate the plugin through the 'Plugins' screen in WordPress.
+3. Navigate to "Metal Prices" in the admin menu to set today's metal rates.
+4. Edit products and set product-level fields under the 'General' tab.
+
+== Frequently Asked Questions ==
+= Will taxes and shipping be applied to computed prices? =
+Yes. The plugin sets product prices so WooCommerce handles taxes/shipping as usual.
+
+= Can I use sale prices? =
+If a manual sale price is present, the plugin will treat it as a base for the computed price (temporarily replacing base price during calculation). Otherwise the computed price is used.
+
+== Screenshots ==
+1. Admin panel: set gold/silver rates (`screenshot-1.png`)
+2. Product edit screen (`screenshot-2.png`)
+3. Front-end price display (`screenshot-3.png`)
+
+== Changelog ==
+= 1.0.2 =
+- Translation comments added for placeholders; output properly escaped.
+- Stable tag synced to plugin version.
+
+= 1.0.1 =
+Initial public release. Security checks, nonce and sanitization implemented. Works for simple and variable products. Tested up to WP 6.8.
+
+== Support ==
+For support, bug reports or feature requests, contact Sheikh Abir Ali at Aolo Software: https://aolo.software/

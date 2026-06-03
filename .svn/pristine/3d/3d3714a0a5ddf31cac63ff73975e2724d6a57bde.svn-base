@@ -1,0 +1,138 @@
+=== Dynamic Metal Price Calculator ===
+Contributors: aolo
+Donate link: https://aolo.software/
+Tags: woocommerce, jewellery, gold, silver, dynamic pricing
+Requires at least: 5.0
+Tested up to: 6.8
+Stable tag: 2.0.1
+Requires PHP: 7.4
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Automate WooCommerce jewellery pricing using live metal rates, weight, wastage, and markup from one simple admin dashboard.
+
+== Description ==
+
+**Dynamic Metal Price Calculator** empowers WooCommerce store owners to automate pricing for jewellery products using formula-based computations.  
+No more manual updates — your prices adjust instantly with every rate change.
+
+🔥 **Watch the full video tutorial here:**  
+👉 [https://www.youtube.com/watch?v=xxxxxxxxxxx](https://www.youtube.com/watch?v=xxxxxxxxxxx)
+
+---
+
+### 💡 Key Features
+* **Admin Metal Dashboard** — Set daily gold/silver prices directly from the backend.
+* **Auto Karat Calculation** — Automatically computes derived karat prices:
+  - 22K = gold rate × 93%
+  - 20K = gold rate × 85.5%
+  - 18K = gold rate × 78%
+  - These values are editable directly in admin.
+* **Per-Product Metal Settings**
+  - Metal Type (Gold, Silver, or Custom)
+  - Base Price (optional)
+  - Weight (g)
+  - Wastage (%)
+  - Making Charge (per g)
+  - Markup (%)
+* **Custom Metal Formula Builder**
+  - Create your own metal variables (e.g., *Platinum*, *Rose Gold*).
+  - Define formulas like `platinum = goldrate * 1.25`.
+  - Delete or edit them anytime.
+* **Smart Calculation Formula**
+Final Price = ((Metal Rate × Weight) + Base Price)
++ Wastage + Making Charge + Markup
+
+yaml
+Copy code
+* Fully compatible with **simple and variable products**.
+* Integrates natively with WooCommerce — taxes, discounts, and shipping all apply normally.
+* Auto-detects your **store currency symbol**.
+
+---
+
+### 🧮 Example Calculation
+
+Given:
+- Metal Rate = 85.50  
+- Weight = 10 g  
+- Wastage = 2%  
+- Making Charge = 5.00 (per g)  
+- Markup = 10%
+
+Step-by-step:
+Base = 85.50 × 10 = 855.00
+After Wastage = 855.00 + (855 × 0.02) = 872.10
+After Making = 872.10 + (5 × 10) = 922.10
+Final = 922.10 + (922.10 × 0.10) = 1,014.31
+
+yaml
+Copy code
+**Final Price = 1,014.31**
+
+---
+
+== Installation ==
+
+1. Upload the plugin folder to `/wp-content/plugins/`.
+2. Activate it through **Plugins → Installed Plugins**.
+3. Go to **Metal Prices** under the WordPress Admin Menu.
+4. Enter today’s gold and silver rates.
+5. Optionally define custom metals and formulas.
+6. Edit a product → **General Tab** → select metal type, weight, and markup.
+
+---
+
+== Frequently Asked Questions ==
+
+= Does it support WooCommerce taxes and shipping? =
+Yes. The plugin integrates directly with WooCommerce’s native pricing engine.
+
+= Can I define custom metal types? =
+Yes. Use the “Add Custom Metal” option in the admin panel to define your own rates and formulas.
+
+= Can I remove metals I added? =
+Yes. Each custom metal entry includes a delete option for easy cleanup.
+
+= Does it work with variable products? =
+Absolutely. Each variation is calculated independently.
+
+= Can I modify the karat percentage formulas? =
+Yes. Admins can adjust the percentage multipliers for 22K, 20K, and 18K gold in the settings.
+
+---
+
+== Screenshots ==
+1. Admin dashboard — set metal rates and custom formulas (`screenshot-1.png`)
+2. Product edit screen — configure per-product metal data (`screenshot-2.png`)
+3. Front-end — dynamic price display on WooCommerce product page (`screenshot-3.png`)
+
+---
+
+== Changelog ==
+
+= 2.0.1 =
+- Major release with complete UI/UX overhaul and new formula engine.
+- Editable karat percentages.
+- Custom metal builder + deletion control.
+- Price recalculation notice popup added.
+- Security improvements (nonce + sanitization).
+
+= 1.0.2 =
+- Translation comments and proper output escaping.
+- Synced stable tag with version.
+
+= 1.0.1 =
+- Initial release with WooCommerce integration, nonce checks, and secure meta handling.
+
+---
+
+== Support ==
+
+For support, bug reports, or feature requests, contact **Aolo Software**  
+🌐 [https://aolo.software/](https://aolo.software/)  
+📧 info@aolo.software
+
+---
+
+© Aolo Software. Licensed under GPLv2 or later.

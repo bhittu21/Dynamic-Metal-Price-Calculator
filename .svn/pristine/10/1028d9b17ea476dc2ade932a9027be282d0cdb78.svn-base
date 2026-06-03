@@ -1,0 +1,225 @@
+<?php
+/*
+Plugin Name: Dynamic Metal Price Calculator
+Description: Compute WooCommerce product prices dynamically based on metal rates, weight, wastage, making charge, and markup. Supports gold, silver, karat-based, and custom metals.
+Version: 1.0.3
+Author: aolo
+Author URI: https://tresifylab.com/
+*/
+
+if (!defined('ABSPATH')) exit;
+
+/* ---------------------------
+   ADMIN PAGE
+--------------------------- */
+add_action('admin_menu', function() {
+    add_menu_page(
+        'Metal Prices',
+        'Metal Prices',
+        'manage_options',
+        'dmmp-settings',
+        'dmmp_render_admin_page',
+        'dashicons-chart-line'
+    );
+});
+
+function dmmp_render_admin_page() {
+    if (isset($_POST['dmmp_save_rates'])) {
+        update_option('dmmp_gold_rate', floatval($_POST['dmmp_gold_rate']));
+        update_option('dmmp_silver_rate', floatval($_POST['dmmp_silver_rate']));
+        update_option('dmmp_gold_22k_percent', floatval($_POST['dmmp_gold_22k_percent']));
+        update_option('dmmp_gold_20k_percent', floatval($_POST['dmmp_gold_20k_percent']));
+        update_option('dmmp_gold_18k_percent', floatval($_POST['dmmp_gold_18k_percent']));
+    }
+
+    if (isset($_POST['dmmp_add_custom_metal'])) {
+        $custom_metals = get_option('dmmp_custom_metals', []);
+        $slug = sanitize_title($_POST['dmmp_custom_slug']);
+        $custom_metals[$slug] = [
+            'name'    => sanitize_text_field($_POST['dmmp_custom_name']),
+            'formula' => sanitize_text_field($_POST['dmmp_custom_formula'])
+        ];
+        update_option('dmmp_custom_metals', $custom_metals);
+    }
+
+    if (isset($_POST['dmmp_delete_custom_metal'])) {
+        $slug_to_delete = sanitize_text_field($_POST['dmmp_delete_custom_metal']);
+        $custom_metals = get_option('dmmp_custom_metals', []);
+        if (isset($custom_metals[$slug_to_delete])) {
+            unset($custom_metals[$slug_to_delete]);
+            update_option('dmmp_custom_metals', $custom_metals);
+        }
+    }
+
+    $gold_rate = get_option('dmmp_gold_rate', '');
+    $silver_rate = get_option('dmmp_silver_rate', '');
+    $custom_metals = get_option('dmmp_custom_metals', []);
+    $r22 = get_option('dmmp_gold_22k_percent', 93);
+    $r20 = get_option('dmmp_gold_20k_percent', 85.5);
+    $r18 = get_option('dmmp_gold_18k_percent', 78);
+    ?>
+    <div class="wrap">
+        <h1>Dynamic Metal Price Settings</h1>
+        <form method="post">
+            <table class="form-table">
+                <tr><th>Gold Rate (per gram)</th><td><input type="number" step="0.01" name="dmmp_gold_rate" value="<?php echo esc_attr($gold_rate); ?>"></td></tr>
+                <tr><th>Silver Rate (per gram)</th><td><input type="number" step="0.01" name="dmmp_silver_rate" value="<?php echo esc_attr($silver_rate); ?>"></td></tr>
+
+                <tr><th>22k Gold Percentage</th><td><input type="number" step="0.1" name="dmmp_gold_22k_percent" value="<?php echo esc_attr($r22); ?>"></td></tr>
+                <tr><th>20k Gold Percentage</th><td><input type="number" step="0.1" name="dmmp_gold_20k_percent" value="<?php echo esc_attr($r20); ?>"></td></tr>
+                <tr><th>18k Gold Percentage</th><td><input type="number" step="0.1" name="dmmp_gold_18k_percent" value="<?php echo esc_attr($r18); ?>"></td></tr>
+            </table>
+            <p><input type="submit" name="dmmp_save_rates" class="button-primary" value="Save Rates"></p>
+        </form>
+
+        <hr>
+        <h2>Add Custom Metal</h2>
+        <form method="post">
+            <input type="text" name="dmmp_custom_name" placeholder="Metal Name" required>
+            <input type="text" name="dmmp_custom_slug" placeholder="Slug (unique)" required>
+            <input type="text" name="dmmp_custom_formula" placeholder="Formula (e.g., goldrate * 1.25)" required>
+            <input type="submit" name="dmmp_add_custom_metal" class="button-secondary" value="Add Custom Metal">
+        </form>
+
+        <hr>
+        <h2>Custom Metals</h2>
+        <table class="widefat">
+            <thead><tr><th>Name</th><th>Slug</th><th>Formula</th><th>Action</th></tr></thead>
+            <tbody>
+            <?php if ($custom_metals): foreach ($custom_metals as $slug => $data): ?>
+                <tr>
+                    <td><?php echo esc_html($data['name']); ?></td>
+                    <td><?php echo esc_html($slug); ?></td>
+                    <td><code><?php echo esc_html($data['formula']); ?></code></td>
+                    <td>
+                        <form method="post" style="display:inline;">
+                            <input type="hidden" name="dmmp_delete_custom_metal" value="<?php echo esc_attr($slug); ?>">
+                            <input type="submit" class="button-link-delete" value="Delete">
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; else: ?>
+                <tr><td colspan="4">No custom metals defined.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
+}
+
+/* ---------------------------
+   PRODUCT META FIELDS
+--------------------------- */
+add_action('woocommerce_product_options_general_product_data', function() {
+    global $post;
+    $custom_metals = get_option('dmmp_custom_metals', []);
+    echo '<div class="options_group">';
+    woocommerce_wp_select([
+        'id' => '_dm_metal_type',
+        'label' => 'Metal Type',
+        'options' => array_merge([
+            '' => '— Select —',
+            'gold' => 'Gold',
+            'silver' => 'Silver',
+            '22k' => 'Gold 22k',
+            '20k' => 'Gold 20k',
+            '18k' => 'Gold 18k',
+        ], array_combine(
+            array_keys($custom_metals),
+            array_column($custom_metals, 'name')
+        ))
+    ]);
+    woocommerce_wp_text_input(['id' => '_dm_base_price', 'label' => 'Base Price', 'type' => 'number', 'desc_tip' => true]);
+    woocommerce_wp_text_input(['id' => '_dm_weight', 'label' => 'Weight (g)', 'type' => 'number']);
+    woocommerce_wp_text_input(['id' => '_dm_wastage', 'label' => 'Wastage (%)', 'type' => 'number']);
+    woocommerce_wp_text_input(['id' => '_dm_making_charge', 'label' => 'Making Charge (per g)', 'type' => 'number']);
+    woocommerce_wp_text_input(['id' => '_dm_markup', 'label' => 'Markup (%)', 'type' => 'number']);
+    echo '</div>';
+});
+
+add_action('woocommerce_admin_process_product_object', function($product) {
+    $fields = ['_dm_metal_type','_dm_base_price','_dm_weight','_dm_wastage','_dm_making_charge','_dm_markup'];
+    foreach ($fields as $field) {
+        if (isset($_POST[$field])) $product->update_meta_data($field, sanitize_text_field($_POST[$field]));
+    }
+});
+
+/* ---------------------------
+   PRICE CALCULATION LOGIC
+--------------------------- */
+function dmmp_compute_price_for_product($product) {
+    if (!$product || !is_object($product)) return null;
+
+    $id = $product->get_id();
+    $metal_type = get_post_meta($id, '_dm_metal_type', true);
+    $base_price = floatval(get_post_meta($id, '_dm_base_price', true));
+    $weight = floatval(get_post_meta($id, '_dm_weight', true));
+    $wastage = floatval(get_post_meta($id, '_dm_wastage', true));
+    $making = floatval(get_post_meta($id, '_dm_making_charge', true));
+    $markup = floatval(get_post_meta($id, '_dm_markup', true));
+
+    $gold_rate = floatval(get_option('dmmp_gold_rate', 0));
+    $silver_rate = floatval(get_option('dmmp_silver_rate', 0));
+    $r22 = floatval(get_option('dmmp_gold_22k_percent', 93)) / 100;
+    $r20 = floatval(get_option('dmmp_gold_20k_percent', 85.5)) / 100;
+    $r18 = floatval(get_option('dmmp_gold_18k_percent', 78)) / 100;
+    $custom_metals = get_option('dmmp_custom_metals', []);
+
+    switch ($metal_type) {
+        case 'gold': $metal_rate = $gold_rate; break;
+        case 'silver': $metal_rate = $silver_rate; break;
+        case '22k': $metal_rate = $gold_rate * $r22; break;
+        case '20k': $metal_rate = $gold_rate * $r20; break;
+        case '18k': $metal_rate = $gold_rate * $r18; break;
+        default:
+            if (isset($custom_metals[$metal_type])) {
+                $formula = $custom_metals[$metal_type]['formula'];
+                extract(['goldrate'=>$gold_rate,'silverrate'=>$silver_rate]);
+                try { $metal_rate = eval('return '.$formula.';'); } catch (Throwable $e) { $metal_rate = 0; }
+            } else $metal_rate = 0;
+    }
+
+    // Main formula: (weight × metal rate) + base price + extras
+    $metal_component = ($metal_rate * $weight);
+    $total = $base_price + $metal_component;
+    $total += ($total * ($wastage / 100)); // wastage
+    $total += ($making * $weight);         // making charge
+    $total += ($total * ($markup / 100));  // markup
+
+    return round($total, 2);
+}
+
+/* ---------------------------
+   WOO INTEGRATION
+--------------------------- */
+add_action('save_post_product', function($post_id, $post, $update) {
+    if (wp_is_post_revision($post_id)) return;
+    $product = wc_get_product($post_id);
+    if (!$product) return;
+    $calc = dmmp_compute_price_for_product($product);
+    if ($calc && $calc > 0) {
+        update_post_meta($post_id, '_price', $calc);
+        update_post_meta($post_id, '_regular_price', $calc);
+        $product->set_price($calc);
+        $product->set_regular_price($calc);
+        $product->save();
+    }
+}, 20, 3);
+
+add_filter('woocommerce_product_get_price', function($price, $product) {
+    $calc = dmmp_compute_price_for_product($product);
+    return $calc ?: $price;
+}, 10, 2);
+
+add_filter('woocommerce_product_get_regular_price', function($price, $product) {
+    $calc = dmmp_compute_price_for_product($product);
+    return $calc ?: $price;
+}, 10, 2);
+
+add_action('woocommerce_before_calculate_totals', function($cart) {
+    if (is_admin() && !defined('DOING_AJAX')) return;
+    foreach ($cart->get_cart() as $item) {
+        $calc = dmmp_compute_price_for_product($item['data']);
+        if ($calc) $item['data']->set_price($calc);
+    }
+}, 20);

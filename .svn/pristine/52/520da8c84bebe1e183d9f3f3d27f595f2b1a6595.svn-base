@@ -1,0 +1,111 @@
+=== Dynamic Metal Price Calculator ===
+Contributors: aolo
+Donate link: https://tresifylab.com/
+Tags: woocommerce, jewellery, gold, silver, pricing, dynamic pricing, karat calculator
+Requires at least: 5.0
+Tested up to: 6.8
+Stable tag: 1.0.3
+Requires PHP: 7.4
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Compute jewellery product prices in WooCommerce dynamically using real-time metal rates, weight, wastage, making charge, markup, and karat variations.
+
+== Description ==
+
+Dynamic Metal Price Calculator empowers WooCommerce store owners to price jewellery products automatically based on metal rate and formula-driven computation.
+
+**Core capabilities**
+* Set today’s gold and silver prices directly from a clean admin dashboard.
+* Automatically calculate derived karat rates:
+  - 22K = gold rate × 93%
+  - 20K = gold rate × 85.5%
+  - 18K = gold rate × 78%
+* Add per-product metadata in the **General tab**:
+  - Metal Type
+  - Base Price (optional)
+  - Weight
+  - Wastage (%)
+  - Making Charge (per g)
+  - Markup (%)
+* Automatically compute prices for **simple and variable products**.
+* Supports **automatic currency symbol detection** from WooCommerce settings.
+* Fully integrates with WooCommerce pricing engine (tax, shipping, coupons).
+* Define **custom metal types and formulas** directly in admin — e.g.  
+  `platinum = goldrate * 1.25` or `rose_gold = goldrate * 0.96`.
+
+== Installation ==
+
+1. Upload the plugin folder to `/wp-content/plugins/`.
+2. Activate it through the **Plugins** screen in WordPress.
+3. Go to **Metal Prices** in the admin sidebar and set today’s rates.
+4. Edit a product → **General tab** → fill metal fields and save.
+
+== Formula (Step-by-Step) ==
+
+**Base determination**
+base = ( base_price is set ) ? base_price : ( metal_rate × weight )
+
+**Apply wastage (%)**
+after_wastage = base + ( base × (wastage / 100) )
+
+**Add making charge (per g)**
+after_making = after_wastage + ( making_charge × weight )
+
+**Apply markup (%)**
+final_price = after_making + ( after_making × (markup / 100) )
+
+**Rounding**
+Final value is rounded to two decimal places for currency precision.
+
+== Worked Example ==
+
+Given:
+- metal_rate = 85.50  
+- weight = 10 g  
+- wastage = 2%  
+- making_charge = 5.00 (per g)  
+- markup = 10%
+
+Step-by-step:
+base = 85.50 × 10 = 855.00
+after_wastage = 855.00 + (855 × 0.02) = 872.10
+after_making = 872.10 + (5 × 10) = 922.10
+final_price = 922.10 + (922.10 × 0.10) = 1,014.31
+**Final price = 1,014.31**
+
+== Screenshots ==
+1. Admin panel — set gold/silver rates and view 22K/20K/18K calculations (`screenshot-1.png`)
+2. Product edit screen — input metal parameters (`screenshot-2.png`)
+3. Front-end — computed jewellery pricing (`screenshot-3.png`)
+
+== Frequently Asked Questions ==
+
+= Will WooCommerce taxes and shipping apply? =
+Yes. Computed prices flow through the standard WooCommerce pricing engine.
+
+= Can I define new metals? =
+Yes. You can add custom metal types with your own formulas in the admin panel.
+
+= Does it work for variable products? =
+Yes. Each variation’s price is computed individually based on its settings.
+
+== Changelog ==
+
+= 1.0.3 =
+- Added automatic calculation for 22K, 20K, and 18K gold rates.
+- Added custom metal type and formula editor in admin.
+- Improved admin UI/UX and translation strings.
+- Enhanced data sanitization and escaping.
+
+= 1.0.2 =
+- Translation comments added for placeholders; output properly escaped.
+- Stable tag synced to plugin version.
+
+= 1.0.1 =
+Initial public release — secure data handling, nonce checks, and WooCommerce integration.
+
+== Support ==
+
+For support, feature requests, or bug reports, contact **Tresify Lab**:  
+[https://tresifylab.com/](https://tresifylab.com/)

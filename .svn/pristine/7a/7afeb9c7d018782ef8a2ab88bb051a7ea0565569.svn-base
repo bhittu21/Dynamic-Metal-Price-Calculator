@@ -1,0 +1,341 @@
+<?php
+/*
+Plugin Name: Dynamic Metal Price Calculator
+Plugin URI:  https://aolo.software/dynamic-metal-price-calculator
+Description: Calculate jewellery product prices dynamically in WooCommerce using today's metal rates, base price, weight, wastage, making charge and markup.
+Version:     1.0.2
+Author:      Aolo Software
+Author URI:  https://aolo.software/
+Text Domain: dynamic-metal-price-calculator
+Requires Plugins: woocommerce
+Requires at least: 5.0
+Tested up to: 6.8
+Requires PHP: 7.4
+License:     GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+*/
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+/**
+ * Helper: Get store currency symbol (fallback USD symbol)
+ */
+function dmmp_get_currency_symbol() {
+    $symbol = function_exists( 'get_woocommerce_currency_symbol' ) ? get_woocommerce_currency_symbol() : '';
+    return $symbol ? $symbol : '$';
+}
+
+/**
+ * Helper: Get store currency code (fallback USD)
+ */
+function dmmp_get_currency_code() {
+    $code = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '';
+    return $code ? $code : 'USD';
+}
+
+/* ---------------------------
+   Admin: Metal Rates page
+   --------------------------- */
+add_action( 'admin_menu', function() {
+    add_menu_page(
+        'Metal Prices',
+        'Metal Prices',
+        'manage_options',
+        'dm-metal-prices',
+        'dmmp_render_rates_page',
+        'dashicons-admin-generic',
+        56
+    );
+} );
+
+function dmmp_render_rates_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    // Save handler
+    if ( filter_input( INPUT_POST, 'dmmp_save_rates', FILTER_SANITIZE_STRING ) ) {
+        $nonce = filter_input( INPUT_POST, 'dmmp_rates_nonce', FILTER_SANITIZE_STRING );
+        if ( ! wp_verify_nonce( $nonce, 'dmmp_rates_action' ) ) {
+            echo '<div class="notice notice-error"><p>' . esc_html__( 'Security check failed. Rates not saved.', 'dynamic-metal-price-calculator' ) . '</p></div>';
+        } else {
+            $gold_raw   = filter_input( INPUT_POST, 'dmmp_gold_rate', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION );
+            $silver_raw = filter_input( INPUT_POST, 'dmmp_silver_rate', FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION );
+
+            $gold   = $gold_raw !== null && $gold_raw !== '' ? floatval( $gold_raw ) : 0;
+            $silver = $silver_raw !== null && $silver_raw !== '' ? floatval( $silver_raw ) : 0;
+
+            update_option( 'dmmp_gold_rate', $gold );
+            update_option( 'dmmp_silver_rate', $silver );
+
+            if ( function_exists( 'wc_delete_product_transients' ) ) {
+                $ids = get_posts( [
+                    'post_type'      => 'product',
+                    'posts_per_page' => -1,
+                    'fields'         => 'ids',
+                ] );
+                foreach ( $ids as $pid ) {
+                    wc_delete_product_transients( $pid );
+                }
+            }
+
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Rates saved.', 'dynamic-metal-price-calculator' ) . '</p></div>';
+        }
+    }
+
+    $gold   = get_option( 'dmmp_gold_rate', '' );
+    $silver = get_option( 'dmmp_silver_rate', '' );
+
+    $symbol = dmmp_get_currency_symbol();
+
+    ?>
+    <div class="wrap">
+        <?php
+        // translators: %s = currency symbol (e.g., $ or ₹)
+        $heading = sprintf( esc_html__( "Today's Metal Prices (%s per gram)", 'dynamic-metal-price-calculator' ), esc_html( $symbol ) );
+        echo '<h1>' . esc_html( $heading ) . '</h1>';
+        ?>
+        <form method="post" style="max-width:520px;">
+            <?php wp_nonce_field( 'dmmp_rates_action', 'dmmp_rates_nonce' ); ?>
+            <table class="form-table">
+                <tr>
+                    <th scope="row"><label for="dmmp_gold_rate"><?php echo esc_html__( 'Gold price (per g)', 'dynamic-metal-price-calculator' ); ?></label></th>
+                    <td><input name="dmmp_gold_rate" id="dmmp_gold_rate" type="number" step="0.01" min="0" value="<?php echo esc_attr( $gold ); ?>" class="regular-text" /></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="dmmp_silver_rate"><?php echo esc_html__( 'Silver price (per g)', 'dynamic-metal-price-calculator' ); ?></label></th>
+                    <td><input name="dmmp_silver_rate" id="dmmp_silver_rate" type="number" step="0.01" min="0" value="<?php echo esc_attr( $silver ); ?>" class="regular-text" /></td>
+                </tr>
+            </table>
+            <p><input type="submit" name="dmmp_save_rates" class="button button-primary" value="<?php echo esc_attr__( 'Save Rates', 'dynamic-metal-price-calculator' ); ?>"></p>
+        </form>
+    </div>
+    <?php
+}
+
+/* ---------------------------
+   Product fields (General tab)
+   --------------------------- */
+add_action( 'woocommerce_product_options_general_product_data', 'dmmp_add_product_fields' );
+function dmmp_add_product_fields() {
+    if ( ! function_exists( 'woocommerce_wp_select' ) ) return;
+
+    $symbol = dmmp_get_currency_symbol();
+
+    echo '<div class="options_group">';
+
+    woocommerce_wp_select( [
+        'id'      => '_dm_metal_type',
+        'label'   => __( 'Metal Type', 'dynamic-metal-price-calculator' ),
+        'options' => [
+            'none'   => __( 'None', 'dynamic-metal-price-calculator' ),
+            'gold'   => __( 'Gold', 'dynamic-metal-price-calculator' ),
+            'silver' => __( 'Silver', 'dynamic-metal-price-calculator' ),
+        ],
+    ] );
+
+    // translators: %s = currency symbol (e.g., $)
+    $base_price_label = sprintf( esc_html__( 'Base Price (%s)', 'dynamic-metal-price-calculator' ), esc_html( $symbol ) );
+    woocommerce_wp_text_input( [
+        'id'                => '_dm_base_price',
+        'label'             => $base_price_label,
+        'type'              => 'number',
+        'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+    ] );
+
+    woocommerce_wp_text_input( [
+        'id'                => '_dm_weight',
+        'label'             => __( 'Weight (g)', 'dynamic-metal-price-calculator' ),
+        'type'              => 'number',
+        'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+    ] );
+
+    woocommerce_wp_text_input( [
+        'id'                => '_dm_wastage',
+        'label'             => __( 'Wastage (%)', 'dynamic-metal-price-calculator' ),
+        'type'              => 'number',
+        'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+    ] );
+
+    // translators: %s = currency symbol (e.g., $)
+    $making_charge_label = sprintf( esc_html__( 'Making charge (per g, %s)', 'dynamic-metal-price-calculator' ), esc_html( $symbol ) );
+    woocommerce_wp_text_input( [
+        'id'                => '_dm_making_charge',
+        'label'             => $making_charge_label,
+        'type'              => 'number',
+        'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+    ] );
+
+    woocommerce_wp_text_input( [
+        'id'                => '_dm_markup',
+        'label'             => __( 'Markup (%)', 'dynamic-metal-price-calculator' ),
+        'type'              => 'number',
+        'custom_attributes' => [ 'step' => '0.01', 'min' => '0' ],
+    ] );
+
+    wp_nonce_field( 'dmmp_product_fields_action', 'dmmp_product_fields_nonce' );
+
+    echo '</div>';
+}
+
+/* ---------------------------
+   Save product fields
+   --------------------------- */
+add_action( 'woocommerce_process_product_meta', 'dmmp_save_product_fields' );
+function dmmp_save_product_fields( $post_id ) {
+    if ( ! current_user_can( 'edit_product', $post_id ) ) return;
+
+    $nonce = filter_input( INPUT_POST, 'dmmp_product_fields_nonce', FILTER_SANITIZE_STRING );
+    if ( ! $nonce || ! wp_verify_nonce( $nonce, 'dmmp_product_fields_action' ) ) {
+        return;
+    }
+
+    $fields = [
+        '_dm_metal_type'    => FILTER_SANITIZE_STRING,
+        '_dm_base_price'    => FILTER_SANITIZE_NUMBER_FLOAT,
+        '_dm_weight'        => FILTER_SANITIZE_NUMBER_FLOAT,
+        '_dm_wastage'       => FILTER_SANITIZE_NUMBER_FLOAT,
+        '_dm_making_charge' => FILTER_SANITIZE_NUMBER_FLOAT,
+        '_dm_markup'        => FILTER_SANITIZE_NUMBER_FLOAT,
+    ];
+
+    foreach ( $fields as $key => $filter ) {
+        $raw = filter_input( INPUT_POST, $key, $filter, FILTER_FLAG_ALLOW_FRACTION );
+        if ( $raw !== null ) {
+            if ( $filter === FILTER_SANITIZE_STRING ) {
+                update_post_meta( $post_id, $key, sanitize_text_field( $raw ) );
+            } else {
+                update_post_meta( $post_id, $key, floatval( $raw ) );
+            }
+        }
+    }
+}
+
+/* ---------------------------
+   Compute final price
+   --------------------------- */
+function dmmp_compute_price_for_product( $product ) {
+    if ( ! $product || ! is_object( $product ) ) return null;
+
+    $product_id = method_exists( $product, 'get_id' ) ? $product->get_id() : ( isset( $product->id ) ? $product->id : 0 );
+
+    $metal_type    = get_post_meta( $product_id, '_dm_metal_type', true );
+    $base_price    = get_post_meta( $product_id, '_dm_base_price', true );
+    $weight        = get_post_meta( $product_id, '_dm_weight', true );
+    $wastage       = get_post_meta( $product_id, '_dm_wastage', true );
+    $making_charge = get_post_meta( $product_id, '_dm_making_charge', true );
+    $markup        = get_post_meta( $product_id, '_dm_markup', true );
+
+    // fallback defaults
+    $gold_rate   = floatval( get_option( 'dmmp_gold_rate', 0 ) );
+    $silver_rate = floatval( get_option( 'dmmp_silver_rate', 0 ) );
+
+    if ( $metal_type === 'gold' ) {
+        $metal_rate = $gold_rate;
+    } elseif ( $metal_type === 'silver' ) {
+        $metal_rate = $silver_rate;
+    } else {
+        $metal_rate = 0;
+    }
+
+    // use base price if provided, otherwise compute from metal rate and weight
+    $base = $base_price !== '' && $base_price !== null ? floatval( $base_price ) : ( $metal_rate > 0 && $weight ? ( $metal_rate * floatval( $weight ) ) : null );
+
+    if ( $base === null ) {
+        return null;
+    }
+
+    $wastage_val = $wastage !== '' && $wastage !== null ? floatval( $wastage ) : 0;
+    $making_val  = $making_charge !== '' && $making_charge !== null ? floatval( $making_charge ) : 0;
+    $markup_val  = $markup !== '' && $markup !== null ? floatval( $markup ) : 0;
+
+    // apply wastage percentage
+    $after_wastage = $base + ( $base * ( $wastage_val / 100 ) );
+
+    // apply making charge (per gram) if weight provided
+    $after_making = $after_wastage + ( $making_val * ( $weight ? floatval( $weight ) : 0 ) );
+
+    // apply markup percentage
+    $final = $after_making + ( $after_making * ( $markup_val / 100 ) );
+
+    // return formatted price (as float)
+    return floatval( round( $final, 2 ) );
+}
+
+/* ---------------------------
+   Product price filters
+   --------------------------- */
+add_filter( 'woocommerce_product_get_price', function( $price, $product ) {
+    $calc = dmmp_compute_price_for_product( $product );
+    return $calc !== null ? $calc : $price;
+}, 10, 2 );
+
+add_filter( 'woocommerce_product_get_regular_price', function( $price, $product ) {
+    $calc = dmmp_compute_price_for_product( $product );
+    return $calc !== null ? $calc : $price;
+}, 10, 2 );
+
+add_filter( 'woocommerce_product_get_sale_price', function( $price, $product ) {
+    $stored_sale = get_post_meta( $product->get_id(), '_sale_price', true );
+    if ( $stored_sale !== '' ) {
+        $base_backup = get_post_meta( $product->get_id(), '_dm_base_price', true );
+        update_post_meta( $product->get_id(), '_dm_base_price', floatval( $stored_sale ) );
+        $calc = dmmp_compute_price_for_product( $product );
+        if ( $base_backup === '' ) {
+            delete_post_meta( $product->get_id(), '_dm_base_price' );
+        } else {
+            update_post_meta( $product->get_id(), '_dm_base_price', $base_backup );
+        }
+        return $calc !== null ? $calc : $price;
+    } else {
+        $calc = dmmp_compute_price_for_product( $product );
+        return $calc !== null ? $calc : $price;
+    }
+}, 10, 2 );
+
+/* Variations */
+add_filter( 'woocommerce_variation_prices_price', function( $price, $variation ) {
+    $calc = dmmp_compute_price_for_product( $variation );
+    return $calc !== null ? $calc : $price;
+}, 10, 2 );
+
+add_filter( 'woocommerce_variation_prices_regular_price', function( $price, $variation ) {
+    $calc = dmmp_compute_price_for_product( $variation );
+    return $calc !== null ? $calc : $price;
+}, 10, 2 );
+
+add_filter( 'woocommerce_variation_prices_sale_price', function( $price, $variation ) {
+    $stored_sale = get_post_meta( $variation->get_id(), '_sale_price', true );
+    if ( $stored_sale !== '' ) {
+        $base_backup = get_post_meta( $variation->get_id(), '_dm_base_price', true );
+        update_post_meta( $variation->get_id(), '_dm_base_price', floatval( $stored_sale ) );
+        $calc = dmmp_compute_price_for_product( $variation );
+        if ( $base_backup === '' ) {
+            delete_post_meta( $variation->get_id(), '_dm_base_price' );
+        } else {
+            update_post_meta( $variation->get_id(), '_dm_base_price', $base_backup );
+        }
+        return $calc !== null ? $calc : $price;
+    } else {
+        $calc = dmmp_compute_price_for_product( $variation );
+        return $calc !== null ? $calc : $price;
+    }
+}, 10, 2 );
+
+/* ---------------------------
+   Cart: apply computed price
+   --------------------------- */
+add_action( 'woocommerce_before_calculate_totals', 'dmmp_apply_computed_price_to_cart', 20, 1 );
+function dmmp_apply_computed_price_to_cart( $cart ) {
+    if ( is_admin() && ! defined( 'DOING_AJAX' ) ) return;
+
+    foreach ( $cart->get_cart() as $cart_item_key => $cart_item ) {
+        $product = $cart_item['data'];
+        $calc = dmmp_compute_price_for_product( $product );
+        if ( $calc !== null ) {
+            $product->set_price( floatval( $calc ) );
+        }
+    }
+}
