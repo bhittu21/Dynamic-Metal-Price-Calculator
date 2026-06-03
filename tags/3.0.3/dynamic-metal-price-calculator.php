@@ -1073,6 +1073,10 @@ add_action( 'woocommerce_product_options_general_product_data', function() {
 		}
 	}
 
+	echo '<div class="dmmp-product-pricing-fields">';
+	echo '<h4>' . esc_html__( 'Dynamic Metal Pricing', 'dynamic-metal-price-calculator' ) . '</h4>';
+	echo '<p class="dmmp-product-pricing-help">' . esc_html__( 'Automatic Sale Price: When Regular price is set and Sale price is blank, the calculated metal price can show as the sale price.', 'dynamic-metal-price-calculator' ) . '</p>';
+
 	woocommerce_wp_select( [
 		'id'      => '_dmmp_metal_type',
 		'label'   => __( 'Metal Type', 'dynamic-metal-price-calculator' ),
@@ -1143,6 +1147,8 @@ add_action( 'woocommerce_product_options_general_product_data', function() {
 		'description' => __( 'Optional per-product flat shipping charge to override global (leave blank to use global)', 'dynamic-metal-price-calculator' ),
 		'custom_attributes' => [ 'step' => '0.01' ],
 	] );
+
+	echo '</div>';
 } );
 
 /* ---------------------------------------------------------------------
@@ -1315,6 +1321,26 @@ add_action( 'admin_footer', function() {
 		return;
 	}
 	?>
+	<style type="text/css">
+		#woocommerce-product-data .dmmp-product-pricing-fields,
+		#woocommerce-product-data .dmmp-variation-fields {
+			clear: both;
+			margin: 18px 12px 12px;
+			padding: 14px 0 4px;
+			border-top: 1px solid #dcdcde;
+		}
+		#woocommerce-product-data .dmmp-product-pricing-fields h4,
+		#woocommerce-product-data .dmmp-metal-fields h4 {
+			margin: 0 12px 8px;
+			color: #1d2327;
+		}
+		#woocommerce-product-data .dmmp-product-pricing-help {
+			margin: 0 12px 12px;
+			color: #646970;
+			font-size: 13px;
+			line-height: 1.4;
+		}
+	</style>
 	<script type="text/javascript">
 	jQuery(document).ready(function($) {
 		// Handle toggle click
@@ -1442,7 +1468,7 @@ add_action( 'woocommerce_save_product_variation', function( $variation_id, $i ) 
 			if ( $calc !== null && $calc > 0 ) {
 				// Use WooCommerce product methods to set prices
 				$variation->set_price( $calc );
-				if ( ! dmmp_product_has_raw_sale_price( $variation ) ) {
+				if ( ! dmmp_product_has_manual_sale_price( $variation ) && ! dmmp_product_has_manual_regular_price( $variation ) ) {
 					$variation->set_regular_price( $calc );
 					$variation->set_sale_price( '' );
 				}
@@ -1731,38 +1757,99 @@ function dmmp_get_raw_product_price_meta( $product, $meta_key ) {
 	return get_post_meta( $product->get_id(), $meta_key, true );
 }
 
-function dmmp_product_has_raw_sale_price( $product ) {
+function dmmp_product_has_manual_regular_price( $product ) {
 	$regular_price = dmmp_get_raw_product_price_meta( $product, '_regular_price' );
+
+	return $regular_price !== '' && floatval( $regular_price ) > 0;
+}
+
+function dmmp_product_has_manual_sale_price( $product ) {
 	$sale_price    = dmmp_get_raw_product_price_meta( $product, '_sale_price' );
 
-	return $regular_price !== '' && $sale_price !== '' && floatval( $regular_price ) > 0 && floatval( $sale_price ) > 0;
+	return $sale_price !== '' && floatval( $sale_price ) > 0;
+}
+
+function dmmp_product_has_dynamic_pricing_details( $product ) {
+	if ( ! $product || ! is_object( $product ) || ! method_exists( $product, 'get_id' ) ) {
+		return false;
+	}
+
+	$product_id = $product->get_id();
+	if ( method_exists( $product, 'is_type' ) && $product->is_type( 'variation' ) && get_post_meta( $product_id, '_dmmp_enable', true ) !== '1' ) {
+		return false;
+	}
+
+	$meta_keys = [
+		'_dmmp_metal_type',
+		'_dmmp_weight',
+		'_dmmp_base_price',
+		'_dmmp_wastage',
+		'_dmmp_making_charge',
+		'_dmmp_markup',
+		'_dmmp_gst',
+		'_dmmp_shipping',
+	];
+
+	foreach ( $meta_keys as $meta_key ) {
+		$value = get_post_meta( $product_id, $meta_key, true );
+		if ( $meta_key === '_dmmp_metal_type' && $value !== '' ) {
+			return true;
+		}
+		if ( $meta_key !== '_dmmp_metal_type' && $value !== '' && floatval( $value ) > 0 ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function dmmp_product_has_automatic_sale_price( $product ) {
+	if ( ! dmmp_product_has_manual_regular_price( $product ) || dmmp_product_has_manual_sale_price( $product ) || ! dmmp_product_has_dynamic_pricing_details( $product ) ) {
+		return false;
+	}
+
+	$regular_price = floatval( dmmp_get_raw_product_price_meta( $product, '_regular_price' ) );
+	$calc          = dmmp_compute_price_for_product_object( $product );
+
+	return $calc !== null && $calc > 0 && $calc < $regular_price;
 }
 
 function dmmp_compute_regular_price_for_product_object( $product ) {
-	if ( dmmp_product_has_raw_sale_price( $product ) ) {
-		$regular_price = dmmp_get_raw_product_price_meta( $product, '_regular_price' );
-		return dmmp_compute_price_for_product_object( $product, $regular_price );
+	if ( dmmp_product_has_manual_regular_price( $product ) ) {
+		return floatval( dmmp_get_raw_product_price_meta( $product, '_regular_price' ) );
 	}
 
 	return dmmp_compute_price_for_product_object( $product );
 }
 
 function dmmp_compute_sale_price_for_product_object( $product ) {
-	if ( ! dmmp_product_has_raw_sale_price( $product ) ) {
+	if ( dmmp_product_has_manual_sale_price( $product ) ) {
+		return floatval( dmmp_get_raw_product_price_meta( $product, '_sale_price' ) );
+	}
+
+	if ( ! dmmp_product_has_automatic_sale_price( $product ) ) {
 		return null;
 	}
 
-	$sale_price = dmmp_get_raw_product_price_meta( $product, '_sale_price' );
-	return dmmp_compute_price_for_product_object( $product, $sale_price );
+	return dmmp_compute_price_for_product_object( $product );
 }
 
 function dmmp_compute_active_price_for_product_object( $product ) {
+	if ( dmmp_product_has_manual_sale_price( $product ) ) {
+		return floatval( dmmp_get_raw_product_price_meta( $product, '_sale_price' ) );
+	}
+
+	if ( dmmp_product_has_manual_regular_price( $product ) && ! dmmp_product_has_dynamic_pricing_details( $product ) ) {
+		return floatval( dmmp_get_raw_product_price_meta( $product, '_regular_price' ) );
+	}
+
 	$sale_price = dmmp_compute_sale_price_for_product_object( $product );
 	if ( $sale_price !== null && $sale_price > 0 ) {
 		return $sale_price;
 	}
 
-	return dmmp_compute_price_for_product_object( $product );
+	$calc = dmmp_compute_price_for_product_object( $product );
+	return ( $calc !== null && $calc > 0 ) ? $calc : null;
 }
 
 /* ---------------------------------------------------------------------
@@ -1779,16 +1866,14 @@ add_action( 'save_post_product', function( $post_id, $post, $update ) {
 
 	$calc = dmmp_compute_price_for_product_object( $product );
 	if ( $calc !== null && $calc > 0 ) {
-		if ( dmmp_product_has_raw_sale_price( $product ) ) {
-			$regular_calc = dmmp_compute_regular_price_for_product_object( $product );
-			$sale_calc    = dmmp_compute_sale_price_for_product_object( $product );
+		if ( dmmp_product_has_manual_sale_price( $product ) ) {
+			return;
+		}
 
-			if ( $regular_calc !== null && $regular_calc > 0 && $sale_calc !== null && $sale_calc > 0 ) {
-				update_post_meta( $post_id, '_price', $sale_calc );
-
-				$product->set_price( $sale_calc );
-			}
-		} else {
+		if ( dmmp_product_has_automatic_sale_price( $product ) ) {
+			update_post_meta( $post_id, '_price', $calc );
+			$product->set_price( $calc );
+		} elseif ( ! dmmp_product_has_manual_regular_price( $product ) ) {
 			update_post_meta( $post_id, '_price', $calc );
 			update_post_meta( $post_id, '_regular_price', $calc );
 
@@ -1817,7 +1902,7 @@ add_filter( 'woocommerce_product_get_sale_price', function( $price, $product ) {
 }, 10, 2 );
 
 add_filter( 'woocommerce_get_price_html', function( $price_html, $product ) {
-	if ( ! $product || ! is_object( $product ) || $product->is_type( 'variable' ) || ! dmmp_product_has_raw_sale_price( $product ) ) {
+	if ( ! $product || ! is_object( $product ) || $product->is_type( 'variable' ) || ! dmmp_product_has_automatic_sale_price( $product ) ) {
 		return $price_html;
 	}
 
@@ -1833,6 +1918,34 @@ add_filter( 'woocommerce_get_price_html', function( $price_html, $product ) {
 
 	return wp_kses_post( wc_format_sale_price( $regular_display, $sale_display ) . $product->get_price_suffix() );
 }, 20, 2 );
+
+add_filter( 'woocommerce_product_is_on_sale', function( $is_on_sale, $product ) {
+	if ( dmmp_product_has_automatic_sale_price( $product ) ) {
+		return true;
+	}
+
+	return $is_on_sale;
+}, 10, 2 );
+
+add_filter( 'woocommerce_available_variation', function( $variation_data, $product, $variation ) {
+	if ( ! $variation || ! dmmp_product_has_automatic_sale_price( $variation ) ) {
+		return $variation_data;
+	}
+
+	$regular_calc = dmmp_compute_regular_price_for_product_object( $variation );
+	$sale_calc    = dmmp_compute_sale_price_for_product_object( $variation );
+
+	if ( $regular_calc === null || $sale_calc === null || $regular_calc <= 0 || $sale_calc <= 0 || $sale_calc >= $regular_calc ) {
+		return $variation_data;
+	}
+
+	$regular_display = wc_get_price_to_display( $variation, [ 'price' => $regular_calc ] );
+	$sale_display    = wc_get_price_to_display( $variation, [ 'price' => $sale_calc ] );
+
+	$variation_data['price_html'] = wp_kses_post( wc_format_sale_price( $regular_display, $sale_display ) . $variation->get_price_suffix() );
+
+	return $variation_data;
+}, 20, 3 );
 
 /* ---------------------------------------------------------------------
  * Variable product: Variation price filters

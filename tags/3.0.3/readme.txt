@@ -67,6 +67,11 @@ Yes! You can set metal type, weight, base price, wastage, making charge, markup,
 * Simplified examples
 * Reduced popup text
 * Improved settings page readability
+* Fixed WooCommerce regular and sale price display
+* Added automatic calculated sale price behavior
+* Manual sale price now takes priority over calculated price
+* Regular price now shows with strikethrough when calculated metal price is used as sale price
+* Fixed product edit price field layout inside WooCommerce General product data
 
 = 3.0.2 =
 * Added an opt-in activation welcome popup to collect setup/support email leads for Tresify Lab
